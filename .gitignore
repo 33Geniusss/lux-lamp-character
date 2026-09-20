@@ -4,7 +4,10 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
-output/
+output/*
+!output/pdf/
+output/pdf/*
+!output/pdf/TECHNICAL_NOTE.pdf
 tmp/
 .env
 .env.*
