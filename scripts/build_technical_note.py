@@ -410,8 +410,8 @@ def draw_page_two(pdf: canvas.Canvas) -> None:
     y2 = metric_row(pdf, right, y2, col_w, "Warm STT / TTS", "4.7 s / 2.6 s", "Mean latency across 30 speech-to-text trials and 30 text-to-speech trials with models resident in memory.")
     y2 = metric_row(pdf, right, y2, col_w, "GPT response latency", "8.2 s / 2.7 s", "Mean across 30 first requests and 30 post-first requests. Network and remote-service conditions affect these values.")
     y2 = metric_row(pdf, right, y2, col_w, "Cold local latency", "30.0 s", "Mean across 30 cold starts with model weights cached. Startup preloading moves this cost before the first turn.", AMBER)
-    y2 = metric_row(pdf, right, y2, col_w, "Process memory", "1.92 GiB peak", "Speech-only benchmark; working set ended at 1.62 GiB. This is not a full-application peak measurement.")
-    y2 = metric_row(pdf, right, y2, col_w, "CPU / development host", "4.03 cores", "Warm speech benchmark average on AMD Ryzen 9 8945HX (16C/32T), Windows 11, with 31.8 GiB RAM.")
+    y2 = metric_row(pdf, right, y2, col_w, "Full-app memory", "2.01 GiB peak", "90 s process-tree profile: 1.56 GiB steady mean (45-90 s). All local subsystems were enabled.")
+    y2 = metric_row(pdf, right, y2, col_w, "Full-app CPU", "1.68 avg / 5.35 peak", "45-90 s steady mean and 90 s peak. Host: Ryzen 9 8945HX (16C/32T), Windows 11, 31.8 GiB RAM.")
 
     box_y = min(y, y2) - 2
     box_h = 128
@@ -460,7 +460,7 @@ def draw_page_two(pdf: canvas.Canvas) -> None:
     label(pdf, "Measurement scope", MARGIN, 76)
     paragraph(
         pdf,
-        "Latency values are arithmetic means from 30 trials per condition. CPU and memory values describe the local speech benchmark, not the full GUI process.",
+        "Latency values are arithmetic means from 30 trials per condition. Full-app CPU and memory use one 90 s process-tree profile with GUI, camera, MediaPipe, PyBullet, audio, Whisper, and Kokoro enabled; no GPT turn was issued.",
         MARGIN,
         62,
         PAGE_W - 2 * MARGIN,
