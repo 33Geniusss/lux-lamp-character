@@ -1,0 +1,15 @@
+.venv/
+.conda-env/
+.tools/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+output/
+tmp/
+.env
+.env.*
+data/*.tmp
+data/session_memory.json
+models/faster-whisper/
+models/huggingface/
+models/vosk-model-*/
