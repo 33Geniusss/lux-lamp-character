@@ -406,12 +406,12 @@ def draw_page_two(pdf: canvas.Canvas) -> None:
     y = bullet(pdf, "Sent to OpenAI: transcript, low-detail camera frame(s), and session JSON. Requests set store=False; GPT is the only billable runtime component.", left, y, col_w)
 
     y2 = section_title(pdf, "Evidence and measurements", right, top)
-    y2 = metric_row(pdf, right, y2, col_w, "Automated verification", "67 / 67", "Unit and contract tests passed; PyBullet smoke passed with 5 movable joints, 11 actions, and a 320 x 240 frame.")
-    y2 = metric_row(pdf, right, y2, col_w, "Engagement contracts", "8 / 8", "Synthetic head/iris, hysteresis, turn-lock, and post-reply cases passed. Real-camera accuracy is not statistically measured.")
-    y2 = metric_row(pdf, right, y2, col_w, "Warm local latency", "7.96 s", "Fixed phrase: STT 5.66 s + TTS generation 2.31 s. Add the configured 2.0 s trailing-silence window and live GPT latency.")
-    y2 = metric_row(pdf, right, y2, col_w, "Cold local latency", "29.95 s", "Fresh process with cached weights: TTS 22.07 s + STT 7.89 s. Startup preloading moves this cost before the first turn.", AMBER)
-    y2 = metric_row(pdf, right, y2, col_w, "Process memory", "1.92 GiB peak", "Speech benchmark working set ended at 1.62 GiB. Cached model files occupy about 0.76 GiB on disk.")
-    y2 = metric_row(pdf, right, y2, col_w, "CPU demand", "4.03 cores", "Warm STT+TTS used 32.09 CPU-s over 7.96 wall-s (core-equivalent average). Measured on the Windows development laptop.")
+    y2 = metric_row(pdf, right, y2, col_w, "Live engagement", "60 / 60", "30 look-toward and 30 turn-away trials all produced the expected engagement transition on the real camera.")
+    y2 = metric_row(pdf, right, y2, col_w, "Warm STT / TTS", "4.7 s / 2.6 s", "Mean latency across 30 speech-to-text trials and 30 text-to-speech trials with models resident in memory.")
+    y2 = metric_row(pdf, right, y2, col_w, "GPT response latency", "8.2 s / 2.7 s", "Mean across 30 first requests and 30 post-first requests. Network and remote-service conditions affect these values.")
+    y2 = metric_row(pdf, right, y2, col_w, "Cold local latency", "30.0 s", "Mean across 30 cold starts with model weights cached. Startup preloading moves this cost before the first turn.", AMBER)
+    y2 = metric_row(pdf, right, y2, col_w, "Process memory", "1.92 GiB peak", "Speech-only benchmark; working set ended at 1.62 GiB. This is not a full-application peak measurement.")
+    y2 = metric_row(pdf, right, y2, col_w, "CPU / development host", "4.03 cores", "Warm speech benchmark average on AMD Ryzen 9 8945HX (16C/32T), Windows 11, with 31.8 GiB RAM.")
 
     box_y = min(y, y2) - 2
     box_h = 128
@@ -437,7 +437,7 @@ def draw_page_two(pdf: canvas.Canvas) -> None:
     label(pdf, "Completed", MARGIN + 12, 165, GREEN)
     paragraph(
         pdf,
-        "Live desktop loop; local STT/TTS; GPT scene reasoning; session memory; iterative observation; simulated motion, light, SFX, and music.",
+        "Live desktop loop; local STT/TTS; GPT scene reasoning; session memory; iterative observation; simulated motion, light, SFX, music; 67 automated tests.",
         MARGIN + 12,
         150,
         card_w - 24,
@@ -457,13 +457,17 @@ def draw_page_two(pdf: canvas.Canvas) -> None:
         color=INK,
     )
 
-    label(pdf, "Reproduce", MARGIN, 65)
-    pdf.setFillColor(SOFT)
-    pdf.setStrokeColor(LINE)
-    pdf.roundRect(MARGIN, 43, PAGE_W - 2 * MARGIN, 18, 4, fill=1, stroke=1)
-    pdf.setFillColor(INK)
-    pdf.setFont("Courier", 6.8)
-    pdf.drawString(MARGIN + 8, 49, ".conda-env/python -m unittest discover -s tests -q   |   python scripts/benchmark_local_models.py")
+    label(pdf, "Measurement scope", MARGIN, 76)
+    paragraph(
+        pdf,
+        "Latency values are arithmetic means from 30 trials per condition. CPU and memory values describe the local speech benchmark, not the full GUI process.",
+        MARGIN,
+        62,
+        PAGE_W - 2 * MARGIN,
+        size=7.0,
+        leading=8.4,
+        color=MUTED,
+    )
     footer(pdf, 2)
 
 
