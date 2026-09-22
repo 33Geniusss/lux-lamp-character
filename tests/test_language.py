@@ -7,7 +7,7 @@ from types import SimpleNamespace
 from unittest import mock
 
 from src.lamp_character.actions import MotionLabel
-from src.lamp_character.app import LampWindow
+from src.lamp_character.app import LampWindow, configure_api_key_for_gui
 from src.lamp_character.language import (
     FOLLOW_UP_OBSERVATION_INSTRUCTIONS,
     FollowUpObservationRequest,
@@ -435,6 +435,21 @@ class LanguageModelTests(unittest.TestCase):
             self.assertTrue(api_key_configured())
         with mock.patch.dict(os.environ, {"OPENAI_API_KEY": ""}):
             self.assertFalse(api_key_configured())
+
+    def test_missing_key_is_prompted_for_without_persisting_to_disk(self):
+        terminal = SimpleNamespace(isatty=lambda: True)
+        with (
+            mock.patch.dict(os.environ, {}, clear=True),
+            mock.patch("src.lamp_character.app.sys.stdin", terminal),
+            mock.patch(
+                "src.lamp_character.app.getpass",
+                return_value="  test-secret  ",
+            ) as prompt,
+        ):
+            configure_api_key_for_gui(language_enabled=True)
+            self.assertEqual(os.environ["OPENAI_API_KEY"], "test-secret")
+
+        prompt.assert_called_once_with("OpenAI API key: ")
 
 
 if __name__ == "__main__":

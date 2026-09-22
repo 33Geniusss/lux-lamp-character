@@ -1,0 +1,37 @@
+from __future__ import annotations
+
+import unittest
+from unittest import mock
+
+from lamp_character import camera
+
+
+class OpenCameraTests(unittest.TestCase):
+    def test_linux_requests_mjpg_before_resolution(self):
+        capture = mock.Mock()
+
+        with (
+            mock.patch.object(camera.sys, "platform", "linux"),
+            mock.patch.object(camera.cv2, "VideoCapture", return_value=capture) as open_camera,
+        ):
+            result = camera._open_camera(2)
+
+        self.assertIs(result, capture)
+        open_camera.assert_called_once_with(2, camera.cv2.CAP_V4L2)
+        self.assertEqual(
+            capture.set.call_args_list,
+            [
+                mock.call(
+                    camera.cv2.CAP_PROP_FOURCC,
+                    camera.cv2.VideoWriter_fourcc(*"MJPG"),
+                ),
+                mock.call(camera.cv2.CAP_PROP_FRAME_WIDTH, 640),
+                mock.call(camera.cv2.CAP_PROP_FRAME_HEIGHT, 480),
+                mock.call(camera.cv2.CAP_PROP_FPS, 30),
+                mock.call(camera.cv2.CAP_PROP_BUFFERSIZE, 1),
+            ],
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 import argparse
+from getpass import getpass
+import os
 import sys
 import time
 from typing import Callable
@@ -24,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .audio import CharacterAudioWorker, audio_contract
+from .audio import CharacterAudioWorker, audio_contract, audio_output_smoke_test
 from .actions import (
     ACTIONS,
     JOINT_ORDER,
@@ -1320,11 +1322,31 @@ def build_parser() -> argparse.ArgumentParser:
         help="Verify microphone capture without uploading audio.",
     )
     parser.add_argument(
+        "--audio-output-smoke-test",
+        action="store_true",
+        help="Play a short local cue to verify speaker access.",
+    )
+    parser.add_argument(
         "--screenshot",
         type=Path,
         help="Capture the rendered application window to a PNG and exit.",
     )
     return parser
+
+
+def configure_api_key_for_gui(*, language_enabled: bool) -> None:
+    """Prompt securely for an API key only when the interactive GUI needs one."""
+
+    if not language_enabled or api_key_configured():
+        return
+    if not sys.stdin.isatty():
+        raise RuntimeError(
+            "OPENAI_API_KEY is not configured. Set it in the environment or use --no-llm."
+        )
+    api_key = getpass("OpenAI API key: ").strip()
+    if not api_key:
+        raise RuntimeError("An OpenAI API key is required unless --no-llm is used.")
+    os.environ["OPENAI_API_KEY"] = api_key
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1335,6 +1357,11 @@ def main(argv: list[str] | None = None) -> int:
         return camera_smoke_test(args.camera_index, args.model)
     if args.speech_smoke_test:
         return speech_input_smoke_test(args.audio_device)
+    if args.audio_output_smoke_test:
+        return audio_output_smoke_test(args.audio_output_device)
+    configure_api_key_for_gui(
+        language_enabled=not args.no_llm and not bool(args.screenshot)
+    )
     app = QApplication(sys.argv if argv is None else [sys.argv[0], *argv])
     app.setApplicationName("Lamp Character Motion Studio")
     window = LampWindow(

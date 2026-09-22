@@ -5,10 +5,12 @@ from unittest import mock
 import numpy as np
 
 from src.lamp_character.audio import (
+    CHUNK_FRAMES,
     MUSIC_LOOP,
     SAMPLE_RATE,
     SOUND_EFFECTS,
     CharacterAudioWorker,
+    audio_output_smoke_test,
     audio_contract,
 )
 from src.lamp_character.actions import action_duration
@@ -55,6 +57,33 @@ class CharacterAudioTests(unittest.TestCase):
         worker.set_music_active.assert_called_once_with(False)
         worker.set_suspended.assert_called_once_with(True)
         worker.play_cue.assert_not_called()
+
+    def test_output_smoke_test_uses_low_latency_chunks(self):
+        stream = mock.Mock()
+        stream_context = mock.MagicMock()
+        stream_context.__enter__.return_value = stream
+
+        with (
+            mock.patch(
+                "src.lamp_character.audio.sd.query_devices",
+                return_value={"name": "test output"},
+            ),
+            mock.patch(
+                "src.lamp_character.audio.sd.OutputStream",
+                return_value=stream_context,
+            ) as output_stream,
+        ):
+            self.assertEqual(audio_output_smoke_test(), 0)
+
+        output_stream.assert_called_once_with(
+            samplerate=SAMPLE_RATE,
+            channels=1,
+            dtype="float32",
+            device=None,
+            blocksize=CHUNK_FRAMES,
+            latency="low",
+        )
+        self.assertGreater(stream.write.call_count, 0)
 
 
 if __name__ == "__main__":

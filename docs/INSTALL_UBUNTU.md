@@ -1,19 +1,20 @@
-# Ubuntu 24.04 Installation Guide
+# Ubuntu 24.04 on Windows 11 WSL2 Installation Guide
 
-This guide installs and runs Lux on the challenge target: a clean Ubuntu 24.04
-LTS laptop with four CPU cores, 8 GB RAM, no discrete GPU, a camera, microphone,
-speaker, and Wi-Fi.
+This guide installs and runs Lux in an Ubuntu 24.04 WSL2 distribution on
+Windows 11. It covers the additional USB/IP camera and WSLg audio setup required
+by WSL2.
 
-Use a physical Ubuntu desktop or laptop for the final demonstration. WSL can be
-useful for unit or headless checks, but it is not the supported environment for
-validating Linux camera, microphone, speaker, and visible desktop behavior.
+For a physical Ubuntu desktop or laptop, use the separate
+[Native Ubuntu 24.04 Installation Guide](INSTALL_NATIVE_UBUNTU.md). Native
+Ubuntu does not require `usbipd-win`, PowerShell helpers, or the WSLg audio
+bridge described here.
 
 ## Requirements
 
-- 64-bit Ubuntu 24.04 LTS on x86-64. The setup script detects ARM64 and can
-  install the matching Miniforge build, but the complete ARM64 dependency set
-  has not been validated.
-- An active graphical desktop session.
+- Windows 11 with WSL2 and WSLg enabled.
+- A 64-bit Ubuntu 24.04 WSL2 distribution on x86-64.
+- Windows-to-WSL command interop enabled.
+- An active WSLg graphical session.
 - Four CPU cores and 8 GB RAM or more.
 - Several gigabytes of free disk space for the environment and local models.
 - An integrated or USB webcam exposed through Video4Linux.
@@ -21,16 +22,19 @@ validating Linux camera, microphone, speaker, and visible desktop behavior.
 - Internet access for installation, local model downloads, and GPT requests.
 - `sudo` access for installing system libraries.
 - An OpenAI API key for language and vision responses.
+- Permission to approve one Windows administrator prompt for camera sharing.
 
 CUDA and a discrete GPU are not required.
 
-## 1. Open a terminal in the project folder
+## 1. Clone the project
 
-After cloning or extracting the repository, navigate to the folder containing
-`setup.sh` and `run.py`:
+In a new Ubuntu 24.04 WSL2 terminal:
 
 ```bash
-cd /path/to/SWCVChallenge
+mkdir -p ~/workspace
+cd ~/workspace
+git clone https://github.com/33Geniusss/lux-lamp-character.git
+cd lux-lamp-character
 ```
 
 ## 2. Run the one-command installer
@@ -39,20 +43,27 @@ cd /path/to/SWCVChallenge
 bash setup.sh
 ```
 
-Ubuntu asks for the `sudo` password while installing system packages. The
-script then performs the following steps:
+Ubuntu asks for the `sudo` password while installing system packages. On WSL2,
+Windows also shows one UAC approval prompt if `usbipd-win` must be installed or
+the selected camera has not been shared before. These operating-system prompts
+cannot be bypassed safely. The script then performs the following steps:
 
 1. Installs CA certificates, Curl, build tools, OpenGL/EGL, Qt/XCB runtime
-   libraries, PortAudio, and eSpeak NG with `apt-get`.
-2. Finds an existing Conda installation.
-3. If Conda is unavailable, downloads a private Miniforge build matching the
+   libraries, PortAudio build dependencies, camera utilities, and eSpeak NG.
+2. On WSL, installs or locates `usbipd-win`, chooses the active non-IR USB
+   camera, persistently shares it, attaches it to WSL, and grants the Ubuntu
+   user access to `/dev/video*`.
+3. Finds an existing Conda installation.
+4. If Conda is unavailable, downloads a private Miniforge build matching the
    machine architecture into `.tools/miniforge3`.
-4. Creates or updates `.conda-env` from `environment.yml` using Python 3.11.
-5. Installs PyBullet, PySide6, MediaPipe, OpenCV, SoundDevice,
+5. Creates or updates `.conda-env` from `environment.yml` using Python 3.11.
+6. Installs PyBullet, PySide6, MediaPipe, OpenCV, SoundDevice,
    Faster-Whisper, Kokoro, OpenAI, Pydantic, and supporting packages.
-6. Downloads Whisper Small and Kokoro-82M into ignored `models/` caches.
-7. Runs a silent Kokoro warm-up inference.
-8. Runs all unit tests and the CPU PyBullet render smoke test.
+7. On WSL, builds a project-local PortAudio with PulseAudio support so
+   SoundDevice can use WSLg's `RDPSource` and `RDPSink` devices.
+8. Downloads Whisper Small and Kokoro-82M into ignored `models/` caches and
+   runs a silent Kokoro warm-up inference.
+9. Runs unit tests plus PyBullet, camera, microphone, and speaker smoke tests.
 
 The first installation can take several minutes. It is safe to rerun the same
 command after an interrupted installation or when dependencies change.
@@ -67,32 +78,31 @@ bash setup.sh --skip-models
 bash setup.sh --skip-checks
 ```
 
-## 3. Set the OpenAI API key
-
-Read the key without echoing it or placing it in shell history:
-
-```bash
-read -rsp "OpenAI API key: " OPENAI_API_KEY && echo
-export OPENAI_API_KEY
-```
-
-The key exists only in the current shell. Do not put it in source code,
-screenshots, documentation, or committed `.env` files.
-
-The key is required only for GPT language and vision requests. Microphone audio
-is transcribed locally, and replies are synthesized locally.
-
-## 4. Start Lux
+## 3. Start Lux and enter the API key
 
 ```bash
 ./.conda-env/bin/python run.py
 ```
 
+If `OPENAI_API_KEY` is not already set, the terminal displays `OpenAI API key:`.
+Paste the key and press Enter. Input is hidden, the key is kept only in the Lux
+process, and it is not written to the repository or shell history. To configure
+the variable yourself for the current shell instead, use:
+
+```bash
+read -rsp "OpenAI API key: " OPENAI_API_KEY && echo
+export OPENAI_API_KEY
+./.conda-env/bin/python run.py
+```
+
+The key is required only for GPT language and vision requests. Microphone audio
+is transcribed locally, and replies are synthesized locally.
+
 Wait until the status reports `READY · LOCAL MODELS`. Look toward the camera for
 approximately 0.7 seconds to engage the character. When microphone calibration
 finishes and the interface changes to `LISTENING`, begin speaking.
 
-## 5. Verify the deployment
+## 4. Verify the deployment
 
 Run each check from the project folder:
 
@@ -105,6 +115,9 @@ Run each check from the project folder:
 
 # Microphone capture without uploading audio
 ./.conda-env/bin/python run.py --speech-smoke-test
+
+# Play a short local cue through the selected speaker
+./.conda-env/bin/python run.py --audio-output-smoke-test
 
 # Full unit and contract suite
 ./.conda-env/bin/python -m unittest discover -s tests -v
@@ -133,6 +146,14 @@ List audio devices seen by PortAudio:
 
 ```bash
 ./.conda-env/bin/python -c 'import sounddevice as sd; print(sd.query_devices())'
+```
+
+On WSL, `run.py` loads the project-local PulseAudio library automatically. For
+an equivalent standalone Python inspection, include that library explicitly:
+
+```bash
+LD_LIBRARY_PATH="$PWD/.tools/portaudio-pulse/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+  ./.conda-env/bin/python -c 'import sounddevice as sd; print(sd.query_devices())'
 ```
 
 List camera device nodes:
@@ -176,11 +197,22 @@ in before testing again:
 sudo usermod -aG video "$USER"
 ```
 
+On WSL, rerun `bash setup.sh --skip-models`. The setup automatically installs
+and configures `usbipd-win`. The selected camera hardware ID is stored under the
+ignored `.tools/` directory, and later `run.py` launches automatically reattach
+that camera after a WSL restart. Camera sharing survives Windows restarts, but
+the active attachment does not; the launcher handles that non-persistent step.
+
 ### Microphone or speaker errors
 
-Confirm that the device appears in Ubuntu **Settings → Sound**, then list the
-PortAudio devices and pass the correct index. On desktop Ubuntu, PipeWire or
-PulseAudio should expose the selected hardware to PortAudio.
+Confirm that the device appears in the Windows and WSLg audio settings, then
+list the PortAudio devices and pass the correct index.
+
+Under WSL, rerun `bash setup.sh --skip-models`; the setup script builds the
+PulseAudio-enabled PortAudio library used automatically by `run.py`. Confirm
+that `PULSE_SERVER` is `unix:/mnt/wslg/PulseServer`, then run both audio smoke
+tests above. If WSLg audio has stopped responding, run `wsl --shutdown` from
+Windows PowerShell, reopen Ubuntu, reattach any USB camera, and test again.
 
 ### `OPENAI_API_KEY is not configured`
 
@@ -212,8 +244,9 @@ package installation begins with:
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-  ca-certificates curl build-essential \
-  libegl1 libgl1 libportaudio2 espeak-ng \
+  ca-certificates curl build-essential cmake git pkg-config \
+  libegl1 libgl1 libportaudio2 libasound2-dev libpulse-dev \
+  pulseaudio-utils espeak-ng \
   libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
   libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
   libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 \

@@ -22,7 +22,8 @@ The recorded demonstration is available in [DEMO.mp4](DEMO.mp4).
 Choose the guide for your platform:
 
 - [Windows installation](docs/INSTALL_WINDOWS.md)
-- [Ubuntu 24.04 installation](docs/INSTALL_UBUNTU.md)
+- [Ubuntu 24.04 on Windows 11 WSL2](docs/INSTALL_UBUNTU.md)
+- [Native Ubuntu 24.04 installation](docs/INSTALL_NATIVE_UBUNTU.md)
 
 From the project directory, the complete setup is one command.
 
@@ -32,14 +33,18 @@ Windows PowerShell:
 powershell -ExecutionPolicy Bypass -File .\setup.ps1
 ```
 
-Ubuntu 24.04:
+Ubuntu 24.04, either native or under WSL2:
 
 ```bash
 bash setup.sh
 ```
 
 Both scripts create an isolated Python environment, install dependencies,
-download and warm the local speech models, and run automated checks.
+download and warm the local speech models, and run automated checks. Native
+Ubuntu uses its Video4Linux and desktop audio devices directly. On WSL2,
+`setup.sh` additionally configures the Windows USB camera and WSLg audio bridge;
+Windows shows one administrator approval prompt the first time the camera is
+shared.
 
 ## Run
 
@@ -57,13 +62,11 @@ $env:OPENAI_API_KEY = [Net.NetworkCredential]::new("", $lampKey).Password
 Ubuntu:
 
 ```bash
-read -rsp "OpenAI API key: " OPENAI_API_KEY && echo
-export OPENAI_API_KEY
 ./.conda-env/bin/python run.py
 ```
 
-The key exists only in the current terminal environment and is not saved by the
-setup scripts.
+If `OPENAI_API_KEY` is not already set, Lux securely prompts for it in the
+terminal. The entered key exists only in the running process and is not saved.
 
 ## Try this interaction
 
@@ -100,6 +103,7 @@ Ubuntu:
 ./.conda-env/bin/python run.py --smoke-test
 ./.conda-env/bin/python run.py --camera-smoke-test
 ./.conda-env/bin/python run.py --speech-smoke-test
+./.conda-env/bin/python run.py --audio-output-smoke-test
 ```
 
 Use `python run.py --help` to see optional camera, microphone, voice, model, and
@@ -117,7 +121,9 @@ debug settings.
 
 ## Current scope
 
-Lux has been exercised end to end on Windows. The Ubuntu setup path and package
-list are included, but camera, microphone, speaker, and visible GUI operation
-still need validation on a physical Ubuntu 24.04 laptop. The body is simulated;
-there is no real-robot controller or emergency-stop system in this prototype.
+Lux has been exercised end to end on Windows. Its Ubuntu 24.04 WSL2 path has
+also been validated for the visible GUI, a USB/IP camera, WSLg microphone and
+speaker access, and local speech models on the development machine. A physical
+Ubuntu 24.04 laptop still requires separate hardware validation. The body is
+simulated; there is no real-robot controller or emergency-stop system in this
+prototype.

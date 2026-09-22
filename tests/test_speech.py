@@ -390,6 +390,8 @@ class LocalVoiceTests(unittest.TestCase):
             samplerate=KOKORO_SAMPLE_RATE,
             channels=1,
             dtype=np.float32,
+            blocksize=2048,
+            latency="low",
         )
         stream.write.assert_called_once()
 

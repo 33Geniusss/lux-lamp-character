@@ -36,10 +36,23 @@ def _create_landmarker(model_path: Path):
 
 
 def _open_camera(index: int):
-    backend = cv2.CAP_DSHOW if sys.platform == "win32" else cv2.CAP_ANY
+    if sys.platform == "win32":
+        backend = cv2.CAP_DSHOW
+    elif sys.platform.startswith("linux"):
+        backend = cv2.CAP_V4L2
+    else:
+        backend = cv2.CAP_ANY
+
     capture = cv2.VideoCapture(index, backend)
+    if sys.platform.startswith("linux"):
+        # USB/IP camera streams can produce truncated green frames when V4L2
+        # selects uncompressed YUYV. Request MJPG before the resolution so the
+        # device negotiates the lower-bandwidth compressed stream instead.
+        capture.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
     capture.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    if sys.platform.startswith("linux"):
+        capture.set(cv2.CAP_PROP_FPS, 30)
     capture.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     return capture
 

@@ -299,6 +299,8 @@ def _play_wav_bytes(audio_data: bytes, should_stop) -> None:
         samplerate=sample_rate,
         channels=channels,
         dtype=dtype,
+        blocksize=2048,
+        latency="low",
     ) as stream:
         for start in range(0, len(samples), 2048):
             if should_stop():
@@ -316,6 +318,8 @@ def _play_float_audio(samples: np.ndarray, sample_rate: int, should_stop) -> Non
         samplerate=sample_rate,
         channels=1,
         dtype=np.float32,
+        blocksize=2048,
+        latency="low",
     ) as stream:
         for start in range(0, len(audio), 2048):
             if should_stop():

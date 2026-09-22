@@ -281,11 +281,11 @@ def draw_page_one(pdf: canvas.Canvas) -> None:
     steps_left = [
         ("01", "Engage", "MediaPipe combines head pose, iris offset, eye openness, and face size. A 0.7 s enter / 3.0 s exit hysteresis prevents flicker."),
         ("02", "Listen", "An adaptive energy endpoint detector submits after 2.0 s of continuous silence. Audio stays in memory."),
-        ("03", "Understand", "Faster-Whisper Small transcribes locally on CPU; the current frame, transcript, and complete session JSON form the GPT request."),
+        ("03", "Understand", "Faster-Whisper transcribes locally. Every GPT call receives the original transcript, newest frame, and current session JSON; follow-ups also receive prior planning decisions."),
     ]
     steps_right = [
-        ("04", "Act and observe", "GPT returns one whitelisted action. Lux executes fixed keyframes; if another view is requested, it captures a newer frame and calls GPT again."),
-        ("05", "Answer and commit", "Only the final validated decision is spoken. Kokoro renders voice locally, then memory is atomically replaced and listening reopens after playback."),
+        ("04", "Validate, act, observe", "Pydantic parses the result; Lux rechecks zero or one whitelisted action and executes fixed keyframes. A true observation flag then captures a later frame and calls GPT again."),
+        ("05", "Commit and answer", "When the flag is false, Lux normalizes updated_memory and atomically replaces JSON, then runs the final motion, speaks the reply, and reopens listening after playback."),
     ]
 
     def step(number: str, title: str, text: str, x: float, y0: float) -> float:
@@ -305,8 +305,8 @@ def draw_page_one(pdf: canvas.Canvas) -> None:
         y_right = step(*item, right, y_right)
     y = min(y_left, y_right) - 2
 
-    y = section_title(pdf, "Model-to-action contract", MARGIN, y)
-    rounded_card(pdf, MARGIN, y - 62, PAGE_W - 2 * MARGIN, 67, PALE_TEAL)
+    y = section_title(pdf, "GPT context and model-to-action contract", MARGIN, y)
+    rounded_card(pdf, MARGIN, y - 73, PAGE_W - 2 * MARGIN, 78, PALE_TEAL)
     x = MARGIN + 13
     yy = y - 14
     label(pdf, "Structured decision", x, yy, TEAL_DARK)
@@ -322,13 +322,15 @@ def draw_page_one(pdf: canvas.Canvas) -> None:
     )
     paragraph(
         pdf,
-        "Allowed actions: inspect_left, inspect_right, nod_yes, shake_no. The model never emits joint angles. "
-        "At most three camera observations are permitted per user turn; planning replies are neither spoken nor committed.",
+        "true -> execute the selected keyframes (if any) -> wait for a later camera frame -> call GPT again; maximum three images. "
+        "false -> normalize and atomically replace JSON -> execute the final motion -> speak the reply. "
+        "Allowed actions: inspect_left, inspect_right, nod_yes, shake_no; the model never emits joint angles. "
+        "Planning replies and proposed memory stay transient. Invalid schema, action, or observation-limit output is rejected without changing stored JSON.",
         x,
         yy - 4,
         PAGE_W - 2 * MARGIN - 26,
-        size=7.5,
-        leading=9.5,
+        size=7.2,
+        leading=8.8,
         color=MUTED,
     )
 
@@ -396,14 +398,14 @@ def draw_page_two(pdf: canvas.Canvas) -> None:
     y = bullet(pdf, "Perception: MediaPipe Face Landmarker runs locally at 640 x 480. The signals are interaction heuristics, not a claim about cognitive attention.", left, y, col_w)
     y = bullet(pdf, "Speech: Faster-Whisper Small uses CPU int8, beam size 5, and VAD. Kokoro-82M (af_heart, 24 kHz) runs locally and is warmed at startup.", left, y, col_w)
     y = bullet(pdf, "Control: PyBullet loads the fixed-base URDF and CPU TinyRenderer. Eleven five-joint keyframe behaviors are checked against URDF hard limits.", left, y, col_w)
-    y = bullet(pdf, "Concurrency: camera, microphone, GPT, TTS, and character audio use Qt workers; the GUI thread owns turn state and memory commit.", left, y, col_w)
-    y = bullet(pdf, "Memory: compact conversation and scene summaries are schema-validated and atomically stored for the current run; startup resets the file.", left, y, col_w)
+    y = bullet(pdf, "Concurrency: camera, microphone, GPT, TTS, and character audio use Qt workers. The GUI thread coordinates turn state; language workers validate and atomically commit completed memory.", left, y, col_w)
+    y = bullet(pdf, "Memory: conversation_summary plus up to 20 timestamped scene entries. The app preserves session metadata, accepts scene data only for the current observation ID, and atomically replaces JSON only on a completed turn; startup resets it.", left, y, col_w)
 
     y -= 3
     y = section_title(pdf, "Deployment and data", left, y)
     y = bullet(pdf, "Target: Ubuntu 24.04, four CPU cores, 8 GB RAM, no CUDA. setup.sh creates Python 3.11, installs native libraries, downloads models, and runs tests.", left, y, col_w)
     y = bullet(pdf, "Local only: raw microphone audio, engagement inference, Whisper, Kokoro, motion, light, SFX, and music.", left, y, col_w)
-    y = bullet(pdf, "Sent to OpenAI: transcript, low-detail camera frame(s), and session JSON. Requests set store=False; GPT is the only billable runtime component.", left, y, col_w)
+    y = bullet(pdf, "Sent to OpenAI: transcript, low-detail camera frame, session JSON, and same-turn decision history on follow-ups. Requests set store=False; GPT is the only billable runtime component.", left, y, col_w)
 
     y2 = section_title(pdf, "Evidence and measurements", right, top)
     y2 = metric_row(pdf, right, y2, col_w, "Live engagement", "60 / 60", "30 look-toward and 30 turn-away trials all produced the expected engagement transition on the real camera.")

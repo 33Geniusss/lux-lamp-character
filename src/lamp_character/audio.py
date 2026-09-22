@@ -12,6 +12,7 @@ import sounddevice as sd
 
 SAMPLE_RATE = 24_000
 CHUNK_FRAMES = 1024
+OUTPUT_LATENCY = "low"
 
 
 def _tone(
@@ -189,6 +190,8 @@ class CharacterAudioWorker(QThread):
             channels=1,
             dtype="float32",
             device=self.output_device,
+            blocksize=CHUNK_FRAMES,
+            latency=OUTPUT_LATENCY,
         ) as stream:
             for start in range(0, len(samples), CHUNK_FRAMES):
                 with self._condition:
@@ -200,6 +203,28 @@ class CharacterAudioWorker(QThread):
                     return
                 chunk = samples[start : start + CHUNK_FRAMES]
                 stream.write(chunk.reshape(-1, 1))
+
+
+def audio_output_smoke_test(output_device: int | None = None) -> int:
+    """Play one short local cue to verify speaker access."""
+
+    device_info = sd.query_devices(output_device, "output")
+    samples = SOUND_EFFECTS["success"]
+    with sd.OutputStream(
+        samplerate=SAMPLE_RATE,
+        channels=1,
+        dtype="float32",
+        device=output_device,
+        blocksize=CHUNK_FRAMES,
+        latency=OUTPUT_LATENCY,
+    ) as stream:
+        for start in range(0, len(samples), CHUNK_FRAMES):
+            stream.write(samples[start : start + CHUNK_FRAMES].reshape(-1, 1))
+    print(
+        f"Audio output smoke test passed: device={device_info['name']}, "
+        f"sample_rate={SAMPLE_RATE}, frames={len(samples)}"
+    )
+    return 0
 
 
 def audio_contract() -> dict[str, float]:
