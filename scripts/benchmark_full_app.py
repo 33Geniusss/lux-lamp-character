@@ -24,6 +24,15 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_PYTHON = ROOT / ".conda-env" / ("python.exe" if os.name == "nt" else "bin/python")
 
 
+def build_application_command(python: Path, *, api_key_present: bool) -> list[str]:
+    """Build a non-blocking Lux command for the benchmark environment."""
+
+    command = [str(python), str(ROOT / "run.py")]
+    if not api_key_present:
+        command.append("--no-llm")
+    return command
+
+
 def percentile(values: list[float], probability: float) -> float:
     if not values:
         return 0.0
@@ -97,7 +106,11 @@ def main() -> int:
     if not 0 <= args.steady_after < args.duration:
         parser.error("steady-after must be within the measurement duration")
 
-    command = [str(args.python), str(ROOT / "run.py")]
+    api_key_present = bool(os.environ.get("OPENAI_API_KEY"))
+    command = build_application_command(
+        args.python,
+        api_key_present=api_key_present,
+    )
     child = subprocess.Popen(command, cwd=ROOT, env=os.environ.copy())
     root = psutil.Process(child.pid)
     primed: set[int] = set()
@@ -162,7 +175,11 @@ def main() -> int:
             "faster-whisper with Whisper Small",
             "Kokoro-82M",
         ],
-        "excludes": ["successful remote GPT request (OPENAI_API_KEY was not present)"],
+        "excludes": (
+            []
+            if api_key_present
+            else ["remote GPT requests (OPENAI_API_KEY was not present)"]
+        ),
         "command": command,
         "duration_s": round(elapsed_total, 3),
         "steady_after_s": args.steady_after,
@@ -170,7 +187,7 @@ def main() -> int:
         "logical_cpu_count": psutil.cpu_count(logical=True),
         "physical_cpu_count": psutil.cpu_count(logical=False),
         "host_total_memory_gib": round(psutil.virtual_memory().total / (1024**3), 1),
-        "openai_api_key_present": bool(os.environ.get("OPENAI_API_KEY")),
+        "openai_api_key_present": api_key_present,
         "metrics": summarize(samples, args.steady_after),
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

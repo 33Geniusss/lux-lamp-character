@@ -38,8 +38,8 @@ script does not permanently change the machine's PowerShell policy.
 The installer performs the following steps:
 
 1. Finds an existing Conda installation.
-2. If Conda is unavailable, downloads a private 64-bit Miniforge installation
-   into `.tools/miniforge3` inside the project.
+2. If Conda is unavailable, downloads the pinned 64-bit Miniforge release into
+   `.tools/miniforge3` and verifies its SHA-256 checksum before execution.
 3. Creates or updates `.conda-env` from `environment.yml` using Python 3.11.
 4. Installs PyBullet, PySide6, MediaPipe, OpenCV, SoundDevice,
    Faster-Whisper, Kokoro, OpenAI, Pydantic, and supporting packages.
@@ -61,9 +61,10 @@ powershell -ExecutionPolicy Bypass -File .\setup.ps1 -SkipModels
 powershell -ExecutionPolicy Bypass -File .\setup.ps1 -SkipChecks
 ```
 
-## 3. Set the OpenAI API key
+## 3. Optionally set the OpenAI API key in advance
 
-Use a secure prompt so the key is not shown in terminal history:
+Lux prompts securely for the key when it starts if `OPENAI_API_KEY` is absent.
+To set it in the current PowerShell window before launch instead, use:
 
 ```powershell
 $lampKey = Read-Host "OpenAI API key" -AsSecureString
@@ -74,8 +75,10 @@ This sets the key only for the current PowerShell window. Opening a new terminal
 requires entering it again. Do not add the key to source files, `README` files,
 screenshots, or committed `.env` files.
 
-The key is required only for GPT language and vision reasoning. Whisper speech
-recognition and Kokoro speech synthesis run locally.
+The key is required only for GPT language and vision reasoning. Each GPT request
+sends the transcript, one current low-detail camera frame, and validated session
+memory to OpenAI. Whisper speech recognition and Kokoro speech synthesis run
+locally; raw microphone audio is not uploaded.
 
 ## 4. Start Lux
 

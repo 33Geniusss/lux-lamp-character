@@ -160,15 +160,17 @@ class CameraWorker(QThread):
 def camera_smoke_test(camera_index: int, model_path: Path, seconds: float = 3.0) -> int:
     """Open a real camera and run local inference without saving any frames."""
 
-    capture = _open_camera(camera_index)
-    if not capture.isOpened():
-        raise RuntimeError(f"Could not open camera index {camera_index}")
-    landmarker = _create_landmarker(model_path)
-    started = time.monotonic()
-    frames = 0
-    faces = 0
-    resolution = (0, 0)
+    capture = None
+    landmarker = None
     try:
+        capture = _open_camera(camera_index)
+        if not capture.isOpened():
+            raise RuntimeError(f"Could not open camera index {camera_index}")
+        landmarker = _create_landmarker(model_path)
+        started = time.monotonic()
+        frames = 0
+        faces = 0
+        resolution = (0, 0)
         while time.monotonic() - started < seconds:
             ok, frame = capture.read()
             if not ok:
@@ -182,8 +184,10 @@ def camera_smoke_test(camera_index: int, model_path: Path, seconds: float = 3.0)
             faces += int(bool(result.face_landmarks))
             resolution = (frame.shape[1], frame.shape[0])
     finally:
-        capture.release()
-        landmarker.close()
+        if capture is not None:
+            capture.release()
+        if landmarker is not None:
+            landmarker.close()
     print(
         f"Camera smoke test passed: index={camera_index}, frames={frames}, "
         f"resolution={resolution[0]}x{resolution[1]}, face_frames={faces}"

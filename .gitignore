@@ -16,3 +16,4 @@ data/session_memory.json
 models/faster-whisper/
 models/huggingface/
 models/vosk-model-*/
+/DEMO.mp4

@@ -6,6 +6,9 @@ ENVIRONMENT_PATH="${PROJECT_ROOT}/.conda-env"
 TOOLS_PATH="${PROJECT_ROOT}/.tools"
 PRIVATE_CONDA_PATH="${TOOLS_PATH}/miniforge3"
 PORTAUDIO_COMMIT="17967f32de95f2179e7f7caa9632a79c5d59a2ea"
+MINIFORGE_VERSION="26.7.2-0"
+MINIFORGE_LINUX_X86_64_SHA256="281b0ac7d550802efc81af633225a5e6116d29ae72f3ab4eae7168c3931a4c05"
+MINIFORGE_LINUX_AARCH64_SHA256="89b786c8d2c8b0fda7553914c1314ae4ddaa094503802f279377b19ac4463cb2"
 SKIP_MODELS=0
 SKIP_CHECKS=0
 
@@ -126,19 +129,31 @@ find_conda() {
 }
 
 install_private_miniforge() {
-    local architecture installer_name installer_path url
+    local architecture installer_name installer_path url expected_sha256 actual_sha256
     architecture="$(uname -m)"
     case "${architecture}" in
-        x86_64) installer_name="Miniforge3-Linux-x86_64.sh" ;;
-        aarch64|arm64) installer_name="Miniforge3-Linux-aarch64.sh" ;;
+        x86_64)
+            installer_name="Miniforge3-${MINIFORGE_VERSION}-Linux-x86_64.sh"
+            expected_sha256="${MINIFORGE_LINUX_X86_64_SHA256}"
+            ;;
+        aarch64|arm64)
+            installer_name="Miniforge3-${MINIFORGE_VERSION}-Linux-aarch64.sh"
+            expected_sha256="${MINIFORGE_LINUX_AARCH64_SHA256}"
+            ;;
         *) echo "Unsupported Linux architecture: ${architecture}" >&2; exit 1 ;;
     esac
 
     mkdir -p "${TOOLS_PATH}"
     installer_path="$(mktemp --suffix=.sh)"
-    url="https://github.com/conda-forge/miniforge/releases/latest/download/${installer_name}"
+    url="https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/${installer_name}"
     echo "Conda was not found. Downloading a project-local Miniforge..."
     curl -fL "${url}" -o "${installer_path}"
+    actual_sha256="$(sha256sum "${installer_path}" | awk '{print $1}')"
+    if [[ "${actual_sha256}" != "${expected_sha256}" ]]; then
+        rm -f -- "${installer_path}"
+        echo "Miniforge checksum mismatch. Expected ${expected_sha256} but received ${actual_sha256}." >&2
+        exit 1
+    fi
     bash "${installer_path}" -b -p "${PRIVATE_CONDA_PATH}"
     rm -f -- "${installer_path}"
 }
@@ -159,7 +174,7 @@ if [[ -z "${CONDA_EXECUTABLE}" ]]; then
 fi
 
 echo "Creating or updating the Python 3.11 environment..."
-"${CONDA_EXECUTABLE}" env update \
+CONDA_CHANNEL_PRIORITY=strict "${CONDA_EXECUTABLE}" env update \
     --prefix "${ENVIRONMENT_PATH}" \
     --file "${PROJECT_ROOT}/environment.yml" \
     --prune
@@ -183,13 +198,16 @@ if [[ "${SKIP_CHECKS}" -eq 0 ]]; then
     echo "Running the PyBullet smoke test..."
     "${PYTHON_EXECUTABLE}" "${PROJECT_ROOT}/run.py" --smoke-test
     if is_wsl; then
-        echo "Running the WSL camera smoke test..."
-        "${PYTHON_EXECUTABLE}" "${PROJECT_ROOT}/run.py" --camera-smoke-test
-        echo "Running the WSL microphone smoke test..."
-        "${PYTHON_EXECUTABLE}" "${PROJECT_ROOT}/run.py" --speech-smoke-test
-        echo "Running the WSL speaker smoke test..."
-        "${PYTHON_EXECUTABLE}" "${PROJECT_ROOT}/run.py" --audio-output-smoke-test
+        hardware_platform="WSL"
+    else
+        hardware_platform="native Ubuntu"
     fi
+    echo "Running the ${hardware_platform} camera smoke test..."
+    "${PYTHON_EXECUTABLE}" "${PROJECT_ROOT}/run.py" --camera-smoke-test
+    echo "Running the ${hardware_platform} microphone smoke test..."
+    "${PYTHON_EXECUTABLE}" "${PROJECT_ROOT}/run.py" --speech-smoke-test
+    echo "Running the ${hardware_platform} speaker smoke test..."
+    "${PYTHON_EXECUTABLE}" "${PROJECT_ROOT}/run.py" --audio-output-smoke-test
 fi
 
 cat <<'EOF'

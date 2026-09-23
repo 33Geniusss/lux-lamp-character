@@ -12,6 +12,7 @@ import numpy as np
 from src.lamp_character.app import LampWindow
 from src.lamp_character.speech import (
     DEFAULT_TRANSCRIPTION_MODEL,
+    DEFAULT_TRANSCRIPTION_REVISION,
     DEFAULT_TTS_VOICE,
     KOKORO_SAMPLE_RATE,
     NoSpeechDetected,
@@ -157,6 +158,7 @@ class TranscriptionTests(unittest.TestCase):
             device="cpu",
             compute_type="int8",
             download_root=str(cache.resolve()),
+            revision=DEFAULT_TRANSCRIPTION_REVISION,
         )
 
     def test_worker_does_not_require_api_key_for_transcription(self):
@@ -308,6 +310,19 @@ class LocalVoiceTests(unittest.TestCase):
         worker._speak_local.assert_called_once_with()
         self.assertTrue(worker.playback_completed)
 
+    def test_interrupted_neural_reply_is_not_marked_complete_or_replayed(self):
+        worker = VoiceReplyWorker("Hello")
+        worker._speak_neural = mock.Mock(return_value=False)
+        worker._speak_local = mock.Mock(return_value=True)
+        finished = []
+        worker.reply_finished.connect(lambda: finished.append(True))
+
+        worker.run()
+
+        self.assertFalse(worker.playback_completed)
+        self.assertEqual(finished, [])
+        worker._speak_local.assert_not_called()
+
     def test_listening_gate_requires_signal_and_completed_worker(self):
         host = SimpleNamespace(
             _closing=False,
@@ -327,6 +342,36 @@ class LocalVoiceTests(unittest.TestCase):
         host.reply_worker.playback_completed = True
         LampWindow._on_reply_worker_exited(host)
         host._on_reply_finished.assert_called_once_with()
+
+    @mock.patch("src.lamp_character.app.QTimer.singleShot")
+    def test_deferred_close_retries_when_worker_finishes(self, single_shot):
+        worker = mock.Mock()
+        worker.isRunning.return_value = True
+        event = mock.Mock()
+        host = SimpleNamespace(
+            _close_retry_worker=None,
+            _resume_deferred_close=mock.Mock(),
+        )
+
+        LampWindow._defer_close_until_worker_finishes(host, worker, event)
+
+        worker.finished.connect.assert_called_once_with(host._resume_deferred_close)
+        event.ignore.assert_called_once_with()
+        single_shot.assert_not_called()
+
+    @mock.patch("src.lamp_character.app.QTimer.singleShot")
+    def test_deferred_close_handles_worker_exit_before_signal_hookup(self, single_shot):
+        worker = mock.Mock()
+        worker.isRunning.return_value = False
+        event = mock.Mock()
+        host = SimpleNamespace(
+            _close_retry_worker=None,
+            _resume_deferred_close=mock.Mock(),
+        )
+
+        LampWindow._defer_close_until_worker_finishes(host, worker, event)
+
+        single_shot.assert_called_once_with(0, host._resume_deferred_close)
 
     def test_no_speech_during_engagement_schedules_quiet_retry(self):
         auto_actions = mock.Mock()

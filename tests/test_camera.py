@@ -32,6 +32,33 @@ class OpenCameraTests(unittest.TestCase):
             ],
         )
 
+    def test_smoke_test_releases_camera_when_open_fails(self):
+        capture = mock.Mock()
+        capture.isOpened.return_value = False
+
+        with mock.patch.object(camera, "_open_camera", return_value=capture):
+            with self.assertRaisesRegex(RuntimeError, "Could not open camera"):
+                camera.camera_smoke_test(0, mock.Mock())
+
+        capture.release.assert_called_once_with()
+
+    def test_smoke_test_releases_camera_when_landmarker_creation_fails(self):
+        capture = mock.Mock()
+        capture.isOpened.return_value = True
+
+        with (
+            mock.patch.object(camera, "_open_camera", return_value=capture),
+            mock.patch.object(
+                camera,
+                "_create_landmarker",
+                side_effect=RuntimeError("bad model"),
+            ),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "bad model"):
+                camera.camera_smoke_test(0, mock.Mock())
+
+        capture.release.assert_called_once_with()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -54,8 +54,9 @@ cannot be bypassed safely. The script then performs the following steps:
    camera, persistently shares it, attaches it to WSL, and grants the Ubuntu
    user access to `/dev/video*`.
 3. Finds an existing Conda installation.
-4. If Conda is unavailable, downloads a private Miniforge build matching the
-   machine architecture into `.tools/miniforge3`.
+4. If Conda is unavailable, downloads the pinned Miniforge build matching the
+   machine architecture into `.tools/miniforge3` and verifies its SHA-256
+   checksum before execution.
 5. Creates or updates `.conda-env` from `environment.yml` using Python 3.11.
 6. Installs PyBullet, PySide6, MediaPipe, OpenCV, SoundDevice,
    Faster-Whisper, Kokoro, OpenAI, Pydantic, and supporting packages.
@@ -95,8 +96,10 @@ export OPENAI_API_KEY
 ./.conda-env/bin/python run.py
 ```
 
-The key is required only for GPT language and vision requests. Microphone audio
-is transcribed locally, and replies are synthesized locally.
+The key is required only for GPT language and vision requests. Each request
+sends the transcript, one current low-detail camera frame, and validated session
+memory to OpenAI. Microphone audio is transcribed locally, and replies are
+synthesized locally.
 
 Wait until the status reports `READY · LOCAL MODELS`. Look toward the camera for
 approximately 0.7 seconds to engage the character. When microphone calibration
@@ -244,9 +247,9 @@ package installation begins with:
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-  ca-certificates curl build-essential cmake git pkg-config \
+  acl ca-certificates curl build-essential cmake git pkg-config \
   libegl1 libgl1 libportaudio2 libasound2-dev libpulse-dev \
-  pulseaudio-utils espeak-ng \
+  pulseaudio-utils usbutils v4l-utils espeak-ng \
   libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
   libxcb-image0 libxcb-keysyms1 libxcb-render-util0 \
   libxcb-shape0 libxcb-xfixes0 libxcb-xinerama0 \

@@ -22,10 +22,12 @@ import sounddevice as sd
 
 
 DEFAULT_TRANSCRIPTION_MODEL = "small"
+DEFAULT_TRANSCRIPTION_REVISION = "536b0662742c02347bc0e980a01041f333bce120"
 DEFAULT_TRANSCRIPTION_DEVICE = "cpu"
 DEFAULT_TRANSCRIPTION_COMPUTE_TYPE = "int8"
 DEFAULT_TRANSCRIPTION_CACHE = PROJECT_ROOT / "models" / "faster-whisper"
 DEFAULT_TTS_MODEL = "hexgrad/Kokoro-82M"
+DEFAULT_TTS_REVISION = "f3ff3571791e39611d31c381e3a41a3af07b4987"
 DEFAULT_TTS_VOICE = "af_heart"
 DEFAULT_TTS_LANGUAGE = "a"
 DEFAULT_TTS_DEVICE = "cpu"
@@ -155,6 +157,11 @@ def load_transcription_model(
                 device=device,
                 compute_type=compute_type,
                 download_root=str(cache_path),
+                revision=(
+                    DEFAULT_TRANSCRIPTION_REVISION
+                    if model_name == DEFAULT_TRANSCRIPTION_MODEL
+                    else None
+                ),
             )
             _TRANSCRIPTION_MODELS[cache_key] = model
     return model
@@ -187,13 +194,51 @@ def load_tts_pipeline(
     with _TTS_PIPELINE_LOCK:
         pipeline = _TTS_PIPELINES.get(cache_key)
         if pipeline is None:
-            from kokoro import KPipeline
+            from kokoro import KModel, KPipeline
+
+            if model_name != DEFAULT_TTS_MODEL:
+                pipeline = KPipeline(
+                    lang_code=language,
+                    repo_id=model_name,
+                    device=device,
+                )
+                _TTS_PIPELINES[cache_key] = pipeline
+                return pipeline
+
+            from huggingface_hub import snapshot_download
+
+            pinned_directory = (
+                PROJECT_ROOT
+                / "models"
+                / "huggingface"
+                / "pinned-kokoro"
+                / DEFAULT_TTS_REVISION
+            )
+            snapshot_path = Path(
+                snapshot_download(
+                    repo_id=model_name,
+                    revision=DEFAULT_TTS_REVISION,
+                    allow_patterns=["config.json", "*.pth"],
+                    local_dir=str(pinned_directory),
+                )
+            )
+            model_path = snapshot_path / "kokoro-v1_0.pth"
+            config_path = snapshot_path / "config.json"
+            model = KModel(
+                repo_id=model_name,
+                config=str(config_path),
+                model=str(model_path),
+            ).to(device).eval()
 
             pipeline = KPipeline(
                 lang_code=language,
                 repo_id=model_name,
+                model=model,
                 device=device,
             )
+            pipeline._lux_voice_directory = snapshot_path / "voices"
+            pipeline._lux_model_name = model_name
+            pipeline._lux_model_revision = DEFAULT_TTS_REVISION
             _TTS_PIPELINES[cache_key] = pipeline
     return pipeline
 
@@ -211,7 +256,28 @@ def iter_kokoro_audio(
         raise ValueError("Cannot speak an empty reply")
 
     produced_audio = False
-    for result in pipeline(normalized, voice=voice, speed=speed):
+    voice_argument = voice
+    voice_directory = getattr(pipeline, "_lux_voice_directory", None)
+    if voice_directory is not None:
+        from huggingface_hub import hf_hub_download
+
+        local_voices: list[str] = []
+        for name in voice.split(","):
+            normalized_name = name.strip()
+            local_path = Path(voice_directory) / f"{normalized_name}.pt"
+            if not local_path.is_file():
+                local_path = Path(
+                    hf_hub_download(
+                        repo_id=pipeline._lux_model_name,
+                        filename=f"voices/{normalized_name}.pt",
+                        revision=pipeline._lux_model_revision,
+                        local_dir=str(Path(voice_directory).parent),
+                    )
+                )
+            local_voices.append(str(local_path))
+        voice_argument = ",".join(local_voices)
+
+    for result in pipeline(normalized, voice=voice_argument, speed=speed):
         audio = getattr(result, "audio", None)
         if audio is None:
             continue
@@ -463,19 +529,25 @@ class VoiceReplyWorker(QThread):
         self.playback_completed = False
         try:
             if self.neural_enabled:
-                self._speak_neural()
+                completed = self._speak_neural()
             else:
-                self._speak_local()
+                completed = self._speak_local()
+            if not completed or self.isInterruptionRequested():
+                return
             self.playback_completed = True
             self.reply_finished.emit()
         except Exception as neural_error:
+            if self.isInterruptionRequested():
+                return
             if not self.neural_enabled:
                 self.failure.emit(str(neural_error))
                 return
             try:
                 self.voice_status.emit("SPEAKING · SYSTEM VOICE FALLBACK")
                 self.reply_started.emit()
-                self._speak_local()
+                completed = self._speak_local()
+                if not completed or self.isInterruptionRequested():
+                    return
                 self.playback_completed = True
                 self.reply_finished.emit()
             except Exception as local_error:
@@ -484,7 +556,9 @@ class VoiceReplyWorker(QThread):
                     f"system voice failed: {local_error}"
                 )
 
-    def _speak_neural(self) -> None:
+    def _speak_neural(self) -> bool:
+        if self.isInterruptionRequested():
+            return False
         self.voice_status.emit("LOADING · LOCAL KOKORO")
         pipeline = load_tts_pipeline(self.tts_model)
         self.voice_status.emit("GENERATING · LOCAL KOKORO")
@@ -495,7 +569,7 @@ class VoiceReplyWorker(QThread):
             self.tts_voice,
         ):
             if self.isInterruptionRequested():
-                return
+                return False
             if not started:
                 started = True
                 self.voice_status.emit("SPEAKING · LOCAL KOKORO")
@@ -505,8 +579,13 @@ class VoiceReplyWorker(QThread):
                 KOKORO_SAMPLE_RATE,
                 self.isInterruptionRequested,
             )
+            if self.isInterruptionRequested():
+                return False
+        return True
 
-    def _speak_local(self) -> None:
+    def _speak_local(self) -> bool:
+        if self.isInterruptionRequested():
+            return False
         engine = pyttsx3.init()
         engine.setProperty("rate", 165)
         engine.setProperty("volume", 0.95)
@@ -516,6 +595,7 @@ class VoiceReplyWorker(QThread):
         engine.say(self.text)
         engine.runAndWait()
         engine.stop()
+        return not self.isInterruptionRequested()
 
 
 def speech_input_smoke_test(

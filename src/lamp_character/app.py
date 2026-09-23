@@ -128,6 +128,7 @@ class LampWindow(QMainWindow):
         self.follow_up_observation_worker: FollowUpObservationWorker | None = None
         self._speech_handled = False
         self._closing = False
+        self._close_retry_worker = None
         self.language_enabled = language_enabled
         self.language_model = language_model
         self.neural_voice_enabled = neural_voice_enabled
@@ -1204,6 +1205,21 @@ class LampWindow(QMainWindow):
             lines.append(f"{short_names[name]:<10} {positions[name]:>+6.2f} rad")
         self.joints_label.setText("\n".join(lines))
 
+    def _defer_close_until_worker_finishes(self, worker, event: QCloseEvent) -> None:
+        """Retry the close automatically after one blocking worker exits."""
+
+        if self._close_retry_worker is not worker:
+            self._close_retry_worker = worker
+            worker.finished.connect(self._resume_deferred_close)
+        event.ignore()
+        # The worker can exit between wait() timing out and this signal hookup.
+        if not worker.isRunning():
+            QTimer.singleShot(0, self._resume_deferred_close)
+
+    def _resume_deferred_close(self) -> None:
+        self._close_retry_worker = None
+        QTimer.singleShot(0, self.close)
+
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt API name
         self._closing = True
         self.timer.stop()
@@ -1214,37 +1230,40 @@ class LampWindow(QMainWindow):
         ):
             self.speech_model_warmup_worker.requestInterruption()
             if not self.speech_model_warmup_worker.wait(2500):
-                self.speech_model_warmup_worker.finished.connect(self.close)
-                event.ignore()
+                self._defer_close_until_worker_finishes(
+                    self.speech_model_warmup_worker, event
+                )
                 return
         if self.camera_worker is not None and self.camera_worker.isRunning():
             self.camera_worker.requestInterruption()
             if not self.camera_worker.wait(2500):
-                event.ignore()
+                self._defer_close_until_worker_finishes(self.camera_worker, event)
                 return
         if self._speech_is_running():
             self.speech_worker.requestInterruption()
             if not self.speech_worker.wait(2500):
-                event.ignore()
+                self._defer_close_until_worker_finishes(self.speech_worker, event)
                 return
         if self._reply_is_running():
             self.reply_worker.requestInterruption()
             if not self.reply_worker.wait(12000):
-                event.ignore()
+                self._defer_close_until_worker_finishes(self.reply_worker, event)
                 return
         if (
             self.language_worker is not None
             and self.language_worker.isRunning()
             and not self.language_worker.wait(12000)
         ):
-            event.ignore()
+            self._defer_close_until_worker_finishes(self.language_worker, event)
             return
         if (
             self.follow_up_observation_worker is not None
             and self.follow_up_observation_worker.isRunning()
             and not self.follow_up_observation_worker.wait(12000)
         ):
-            event.ignore()
+            self._defer_close_until_worker_finishes(
+                self.follow_up_observation_worker, event
+            )
             return
         if self.character_audio_worker is not None:
             self.character_audio_worker.shutdown()
@@ -1252,7 +1271,9 @@ class LampWindow(QMainWindow):
                 self.character_audio_worker.isRunning()
                 and not self.character_audio_worker.wait(2500)
             ):
-                event.ignore()
+                self._defer_close_until_worker_finishes(
+                    self.character_audio_worker, event
+                )
                 return
         self.simulator.close()
         event.accept()

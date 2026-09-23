@@ -15,7 +15,7 @@ with a simulated five-joint body to create one continuous interaction.
 - Coordinate body motion, colored light, speech, sound effects, and music.
 - Show live camera, engagement state, transcript, memory status, and per-turn timing.
 
-The recorded demonstration is available in [DEMO.mp4](DEMO.mp4).
+The recorded demonstration is available in [Watch the demonstration](https://github.com/33Geniusss/lux-lamp-character/releases/download/v1.0.0/DEMO.mp4).
 
 ## Quick start
 
@@ -48,8 +48,10 @@ shared.
 
 ## Run
 
-Lux uses an OpenAI API key for language and visual reasoning. Speech recognition
-and speech synthesis run locally.
+Lux uses an OpenAI API key for language and visual reasoning. Each GPT request
+sends the transcript, one current low-detail camera frame, and validated session
+memory to OpenAI. Speech recognition and speech synthesis run locally, and raw
+microphone audio is not uploaded.
 
 Windows PowerShell:
 

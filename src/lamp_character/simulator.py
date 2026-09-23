@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
 import math
 
@@ -12,6 +13,24 @@ import pybullet_data
 
 from .actions import ACTIONS, HOME_POSE, JOINT_ORDER, Action, Color, Pose, WARM_DIM
 from .model_adapter import prepare_pybullet_urdf
+
+
+def _release_client_on_initialization_error(initializer):
+    """Disconnect a partially constructed PyBullet client before re-raising."""
+
+    @wraps(initializer)
+    def guarded(self, *args, **kwargs):
+        try:
+            return initializer(self, *args, **kwargs)
+        except Exception:
+            if getattr(self, "client_id", -1) >= 0 and not getattr(
+                self, "_closed", False
+            ):
+                p.disconnect(physicsClientId=self.client_id)
+                self._closed = True
+            raise
+
+    return guarded
 
 
 @dataclass
@@ -27,6 +46,7 @@ class PlaybackState:
 class LampSimulator:
     """Owns one isolated PyBullet client and the animated lamp body."""
 
+    @_release_client_on_initialization_error
     def __init__(self, urdf_path: str | Path) -> None:
         self.urdf_path = Path(urdf_path).resolve()
         if not self.urdf_path.is_file():

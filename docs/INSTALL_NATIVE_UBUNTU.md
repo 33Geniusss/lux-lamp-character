@@ -55,14 +55,15 @@ Windows administrator prompt is involved. The installer then:
 
 1. Installs camera utilities, desktop audio libraries, OpenGL/EGL, Qt/XCB,
    build tools, PortAudio, and eSpeak NG.
-2. Finds Conda or installs a project-private Miniforge under
-   `.tools/miniforge3`.
+2. Finds Conda or installs a pinned project-private Miniforge under
+   `.tools/miniforge3` after verifying its SHA-256 checksum.
 3. Creates or updates the Python 3.11 environment under `.conda-env`.
 4. Installs PyBullet, PySide6, MediaPipe, OpenCV, SoundDevice,
    Faster-Whisper, Kokoro, OpenAI, Pydantic, and supporting packages.
 5. Downloads Whisper Small and Kokoro-82M into ignored local model caches and
    performs a silent Kokoro warm-up.
-6. Runs the unit suite and the CPU PyBullet render smoke test.
+6. Runs the unit suite plus PyBullet, camera, microphone, and speaker smoke
+   tests. The speaker check plays one short local cue.
 
 The WSL-only camera sharing and PortAudio build steps are detected and skipped.
 The first installation can take several minutes. It is safe to rerun the same
@@ -97,7 +98,8 @@ pactl list short sources
 pactl list short sinks
 ```
 
-Then run the project hardware checks:
+The installer already runs the project hardware checks. Run them again when
+diagnosing a device change or selecting a different camera/audio device:
 
 ```bash
 # Camera capture and MediaPipe face inference for three seconds
@@ -136,8 +138,10 @@ export OPENAI_API_KEY
 ./.conda-env/bin/python run.py
 ```
 
-The key is used only for GPT language and vision requests. Speech recognition
-uses local Whisper Small, and speech synthesis uses local Kokoro-82M.
+The key is used only for GPT language and vision requests. Each request sends
+the transcript, one current low-detail camera frame, and validated session
+memory to OpenAI. Speech recognition uses local Whisper Small, speech synthesis
+uses local Kokoro-82M, and raw microphone audio is not uploaded.
 
 Wait until the GUI reports `READY · LOCAL MODELS`. Look toward the camera for
 approximately 0.7 seconds to engage the character. Wait for `LISTENING` before

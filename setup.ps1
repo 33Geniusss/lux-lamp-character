@@ -11,6 +11,8 @@ $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 $EnvironmentPath = Join-Path $ProjectRoot ".conda-env"
 $ToolsPath = Join-Path $ProjectRoot ".tools"
 $PrivateCondaPath = Join-Path $ToolsPath "miniforge3"
+$MiniforgeVersion = "26.7.2-0"
+$MiniforgeSha256 = "71cf9519087be74fa53021219ff292beb2fc05fa49e0bb6eb0e0b6b14fccbaab"
 
 function Find-CondaExecutable {
     $privateConda = Join-Path $PrivateCondaPath "Scripts\conda.exe"
@@ -32,12 +34,17 @@ function Install-PrivateMiniforge {
     }
 
     New-Item -ItemType Directory -Force -Path $ToolsPath | Out-Null
-    $installer = Join-Path $env:TEMP "Miniforge3-Windows-x86_64.exe"
-    $url = "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Windows-x86_64.exe"
+    $installerName = "Miniforge3-$MiniforgeVersion-Windows-x86_64.exe"
+    $installer = Join-Path $env:TEMP $installerName
+    $url = "https://github.com/conda-forge/miniforge/releases/download/$MiniforgeVersion/$installerName"
 
     Write-Host "Conda was not found. Downloading a project-local Miniforge..."
     Invoke-WebRequest -Uri $url -OutFile $installer
     try {
+        $actualHash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($actualHash -ne $MiniforgeSha256) {
+            throw "Miniforge checksum mismatch. Expected $MiniforgeSha256 but received $actualHash."
+        }
         $arguments = @(
             "/S",
             "/InstallationType=JustMe",
@@ -68,9 +75,19 @@ if ($null -eq $conda) {
 }
 
 Write-Host "Creating or updating the Python 3.11 environment..."
-& $conda env update --prefix $EnvironmentPath --file (Join-Path $ProjectRoot "environment.yml") --prune
-if ($LASTEXITCODE -ne 0) {
-    throw "Conda environment setup failed with code $LASTEXITCODE."
+$previousChannelPriority = $env:CONDA_CHANNEL_PRIORITY
+try {
+    $env:CONDA_CHANNEL_PRIORITY = "strict"
+    & $conda env update `
+        --prefix $EnvironmentPath `
+        --file (Join-Path $ProjectRoot "environment.yml") `
+        --prune
+    if ($LASTEXITCODE -ne 0) {
+        throw "Conda environment setup failed with code $LASTEXITCODE."
+    }
+}
+finally {
+    $env:CONDA_CHANNEL_PRIORITY = $previousChannelPriority
 }
 
 $python = Join-Path $EnvironmentPath "python.exe"
@@ -102,5 +119,5 @@ if (-not $SkipChecks) {
 
 Write-Host ""
 Write-Host "Setup complete."
-Write-Host "Before using GPT, set OPENAI_API_KEY in this terminal, then run:"
+Write-Host "Start Lux below. If OPENAI_API_KEY is not set, Lux prompts for it securely:"
 Write-Host "  .\.conda-env\python.exe run.py"
